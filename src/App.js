@@ -1,52 +1,15 @@
-import React, { Component } from 'react';
-import Filters from './Filters';
-import './App.css';
+import React, { Component } from "react";
+import Checkbox from "material-ui/Checkbox";
+import AddBox from "material-ui/svg-icons/content/add-box";
+import CheckBox from "material-ui/svg-icons/toggle/check-box";
+import CheckBoxOutlineBlank from "material-ui/svg-icons/toggle/check-box-outline-blank";
+import IndeterminateCheckBox from "material-ui/svg-icons/toggle/indeterminate-check-box";
+import Filters from "./Filters";
+import SceneMap from "./SceneMap";
+import "./App.css";
 
-const hboUri = "http://localhost.hadron.aws.hbogo.com:3000"
+const hboUri = "http://localhost.hadron.aws.hbogo.com:3000";
 // const wicUri = "http://localhost.hadron.aws.hbogo.com:4000"
-
-class SceneMap {
-  constructor() {
-    this.scenes = []
-    fetch("https://spreadsheets.google.com/feeds/list/1iSeYTRX2h7IJHLIa0oFuKirI3SxsXQkqoMkFsv5Aer4/od6/public/values?alt=json")
-    .then(res => res.json()).then(
-      (result) => {
-        console.log("Got some json!", result);
-        result.feed.entry.forEach((sceneEntry) => {
-          this.scenes.push(new Scene(sceneEntry))
-        });
-        console.log(this.scenes)
-      }, (error) => {
-        console.error(error);
-      }
-    );
-  }
-}
-
-class Scene  {
-  constructor(sceneEntry) {
-    for (var property in sceneEntry) {
-      if (property.indexOf("gsx$") === 0 && sceneEntry.hasOwnProperty(property)) {
-        property = property.replace("gsx$", "")
-        this[property] = this._getEntryProperty(property, sceneEntry)
-      }
-    }
-    this.id = (this.season * 10000) + (this.episode * 100) + this.scene;
-    this.duration = this.endtime - this.starttime;
-  }
-
-  _getEntryProperty(prop, sceneEntry) {
-    var value = sceneEntry["gsx$" + prop]["$t"];
-
-    if (Filters.keys[prop] !== undefined) {
-      return value !== "" ? value.split(/, ?/) : [];
-    } else if (value.match(/^\d+$/)) {
-      return parseInt(value, 10)
-    } else {
-      return value !== "" ? value : undefined;
-    }
-  }
-}
 
 class App extends Component {
   constructor(props) {
@@ -54,16 +17,23 @@ class App extends Component {
     this.targetWindow = undefined;
     this.scenes = [];
     this.connectionState = "NOT_CONNECTED";
+    
+    this._enabledFilters = [];   // List of ids of ALL filters, sorted by priority
+    this._exclusionFilters = []; // List of ids of filters to be EXCLUDED
+    this._inclusionFilters = []; // List of ids of filters to be INCLUDED
+    
     this.state = {
       isPlaying: false,
       seekTime: 0,
       currentPosition: 0,
       connection: this.connectionState,
-    }
+      enabledFilters: this._enabledFilters,
+      exclusionFilters: this._exclusionFilters,
+      inclusionFilters: this._inclusionFilters,
+    };
   }
 
   componentDidMount() {
-    this.sceneMap = new SceneMap();
   }
 
   _postMessage(action) {
@@ -74,22 +44,22 @@ class App extends Component {
       action = this.state.isPlaying ? "pause" : "play";
     }
 
-    if (!this.targetWindow) { this._launchHBOWindow() }
+    if (!this.targetWindow) { this._launchHBOWindow(); }
 
     this.targetWindow.postMessage({
       message: "wic-controlaction",
       action: action,
       param: param,
     }, hboUri);
-    console.log(" - POSTED!")
+    console.log(" - POSTED!");
     this.setState({ isPlaying: !this.state.isPlaying });
   }
 
   _receiveMessage(event) {
-    console.log(event)
+    console.log(event);
     if (event.data.message === "handshake_received") {
-      console.log("HANDSHAKE!")
-      this.connectionState = "CONNECTED"
+      console.log("HANDSHAKE!");
+      this.connectionState = "CONNECTED";
       this.setState({ connection: this.connectionState });
     }
     if (event.data.message === "position") {
@@ -97,8 +67,51 @@ class App extends Component {
     }
   }
 
+  _handleCheck(evt, newVal, filterId) {
+    var enabledIdx = this._enabledFilters.indexOf(filterId);
+    var exclusionIdx = this._exclusionFilters.indexOf(filterId);
+    var inclusionIdx = this._inclusionFilters.indexOf(filterId);
+    var willForce = evt.nativeEvent.shiftKey;
+    // If we are changing the force, don't toggle
+    if (willForce) {
+      newVal = !newVal;
+    }
+    console.log(enabledIdx, exclusionIdx, inclusionIdx, willForce, newVal);
+
+    // Enable the checkbox
+    if (newVal) {
+      // Remove it from exclusion, if it was there
+      if (exclusionIdx !== -1) { this._exclusionFilters.splice(exclusionIdx, 1); }
+      // Add it to inclusion, if force and it's not already
+      if (willForce && inclusionIdx === -1) { this._inclusionFilters.push(filterId); }
+      // Remove it from inclusion, if force and it is already
+      else if (willForce && inclusionIdx !== -1) { this._inclusionFilters.splice(inclusionIdx, 1); }
+      // Add it to enabled, if not already there
+      if (enabledIdx === -1) { this._enabledFilters.push(filterId); }
+    }
+    // Disable the checkbox
+    else {
+      // Remove it from inclusion, if it was there
+      if (inclusionIdx !== -1) { this._inclusionFilters.splice(inclusionIdx, 1); }
+      // Remove it from enabled, if it was there
+      if (enabledIdx !== -1) { this._enabledFilters.splice(enabledIdx, 1); }
+      // Add it to exclusion, if force and not already there
+      if (willForce && exclusionIdx === -1) { this._exclusionFilters.push(filterId); }
+      // Remove it from exclusion, if not force
+      else if (willForce && exclusionIdx !== -1) { this._exclusionFilters.splice(exclusionIdx, 1); }
+    }
+
+    this.setState({
+      enabledFilters: this._enabledFilters,
+      exclusionFilters: this._exclusionFilters,
+      inclusionFilters: this._inclusionFilters,
+    });
+
+    this.scenes = SceneMap.filterScenes(this._enabledFilters, this._exclusionFilters, this._inclusionFilters);
+    console.log(this.scenes);
+  }
+
   _handleSeekTime(evt) {
-    console.log(evt)
     this.setState({ seekTime: evt.target.value });
   }
 
@@ -107,9 +120,10 @@ class App extends Component {
     this.connectionState = "NOT_CONNECTED";
     
     var episodeId = "GVVD52AFtf8NosSQJAAGb";
-    this.targetWindow = window.open(hboUri + "/episode/urn:hbo:episode:" + episodeId + "?autoplay=true",
-                                    "WIC-HBOWindow",
-                                    "width=800,height=600");
+    this.targetWindow = window.open(
+      hboUri + "/episode/urn:hbo:episode:" + episodeId + "?autoplay=true",
+      "WIC-HBOWindow",
+      "width=800,height=600");
     window.addEventListener("message", this._receiveMessage.bind(this));
     this.connectionState = "OPENING";
     this._startHandshake();
@@ -125,7 +139,7 @@ class App extends Component {
       this.targetWindow.postMessage({ message: "handshake_request" }, hboUri);  
     }
     else if (this.connectionState === "POLLING") {
-      console.log("Polling target window for handshake...", this.connectionState)
+      console.log("Polling target window for handshake...", this.connectionState);
       this.setState({ connection: this.connectionState });
     }
     else {
@@ -139,7 +153,7 @@ class App extends Component {
     return (
       <div className="App">
         <header className="App-header">
-          <img src="images/got-logo-white.png" alt="logo" style={{ opacity: 0.5 }}/>
+          <img src="images/got-logo-white.png" alt="logo" style={{ opacity: 0.05 }}/>
         </header>
         <p className="App-intro">
         </p>
@@ -160,10 +174,20 @@ class App extends Component {
         */}
         <button onClick={this._launchHBOWindow.bind(this)}>Launch HBO</button>
         <br/><br/>
-        <button onClick={(e) => this._postMessage("toggle")}>{this.state.isPlaying ? "Pause" : "Play"}</button>
+        <button onClick={(__e) => this._postMessage("toggle")}>{this.state.isPlaying ? "Pause" : "Play"}</button>
         <br/><br/>
         <input type="number" value={this.state.seekTime} onChange={this._handleSeekTime.bind(this)} />
-        <button onClick={(e) => this._postMessage("seek")}>Seek</button>
+        <button onClick={(__e) => this._postMessage("seek")}>Seek</button>
+        <div className="categoryContainer">
+          { Filters.characters.map((char) => (
+            <Checkbox key={char.id} label={char.name} 
+              checked={this.state.enabledFilters.indexOf(char.id) !== -1} 
+              checkedIcon={this.state.inclusionFilters.indexOf(char.id) === -1 ? <CheckBox/> :  <AddBox/>}
+              uncheckedIcon={this.state.exclusionFilters.indexOf(char.id) === -1 ? <CheckBoxOutlineBlank/> :  <IndeterminateCheckBox/>}
+              onCheck={(evt, newVal) => this._handleCheck(evt, newVal, char.id)}/>
+          ))
+          }
+        </div>
         <div style={{ position: "absolute", bottom: 0, left: 0 }}>{this.state.currentPosition}</div>
         <div style={{ position: "absolute", bottom: 0, right: 0 }}>{this.state.connection}</div>
       </div>
