@@ -1,0 +1,53 @@
+#FilterSection {
+  display: flex;
+  flex: 0 1 auto;
+  overflow:hidden;
+  flex-direction: column;
+  position: fixed;
+  max-height: calc(100vh - 50px);
+  left: 0; right: 0; bottom: 0;
+  padding: 0 8px 4px 8px;
+}
+
+.filtersViewTitlebar {
+  text-align: right;
+}
+
+.filtersViewContainer {
+  display: flex;
+  flex: 0 1 auto;
+  overflow:hidden;
+}
+
+.categoryContainer {
+  flex: 1 1 auto;
+  overflow: auto;
+}
+
+.filterContainer {
+  display: block;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  padding: 8px 4px;
+}
+.filterContainer:hover {
+  background-color: rgba(255,255,255,0.2);
+}
+
+#filterCharacterContainer {
+  flex-basis: 160px;
+}
+#filterLocationContainer {
+  flex-basis: 160px;
+}
+#filterStorylineContainer {
+  flex-basis: 320px;
+}
+
+.filterDescription {
+  white-space: normal;
+  font-size: 80%;
+  padding-left: 3.3em;
+  text-align: justify;
+}

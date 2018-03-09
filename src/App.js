@@ -1,11 +1,10 @@
 import React, { Component } from "react";
-import Checkbox from "material-ui/Checkbox";
-import AddBox from "material-ui/svg-icons/content/add-box";
-import CheckBox from "material-ui/svg-icons/toggle/check-box";
-import CheckBoxOutlineBlank from "material-ui/svg-icons/toggle/check-box-outline-blank";
-import IndeterminateCheckBox from "material-ui/svg-icons/toggle/indeterminate-check-box";
-import Filters from "./Filters";
 import SceneMap from "./SceneMap";
+import EpisodeMap from "./EpisodeMap";
+import WICEpisodeList from "./WICEpisodeList";
+import WICFilterAutoComplete from "./WICFilterAutoComplete";
+import WICFilterContainer from "./WICFilterContainer";
+import WICSceneList from "./WICSceneList";
 import "./App.css";
 
 const hboUri = "http://localhost.hadron.aws.hbogo.com:3000";
@@ -15,25 +14,62 @@ class App extends Component {
   constructor(props) {
     super(props);
     this.targetWindow = undefined;
-    this.scenes = [];
     this.connectionState = "NOT_CONNECTED";
     
-    this._enabledFilters = [];   // List of ids of ALL filters, sorted by priority
-    this._exclusionFilters = []; // List of ids of filters to be EXCLUDED
-    this._inclusionFilters = []; // List of ids of filters to be INCLUDED
+    this._filters = {
+      enabled: [],   // List of ids of ALL filters, sorted by priority
+      excluded: [], // List of ids of filters to be EXCLUDED
+      included: [], // List of ids of filters to be INCLUDED
+    };
     
     this.state = {
       isPlaying: false,
       seekTime: 0,
+      scenes: [],
+      episodes: [],
       currentPosition: 0,
       connection: this.connectionState,
-      enabledFilters: this._enabledFilters,
-      exclusionFilters: this._exclusionFilters,
-      inclusionFilters: this._inclusionFilters,
     };
+
+    SceneMap.onReady((__scenes) => {
+      EpisodeMap.onReady((__episodes) => {
+        this._fetchTokenAndEpisodes().then(() => {
+          var scenes = SceneMap.filterScenes(this._filters);
+          this.setState({ 
+            scenes: scenes,
+            episodes: EpisodeMap.filterEpisodes(this.state.scenes)
+          });
+        });
+      });
+    });
   }
 
   componentDidMount() {
+  }
+
+  _fetchTokenAndEpisodes() {
+    return new Promise((resolve, reject) => {
+      fetch("https://comet.api.hbo.com/tokens", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          "client_id":"88a4f3c6-f1de-42d7-8ef9-d3b00139ea6a",
+          "client_secret":"88a4f3c6-f1de-42d7-8ef9-d3b00139ea6a",
+          "scope":"browse video_playback_free",
+          "grant_type":"client_credentials",
+        }),
+      }).then(res => res.json()).then(
+        (response) => {
+          this._hurleyToken = response.access_token;
+          resolve(EpisodeMap.fetchEpisodeMetadata(this._hurleyToken));
+        }, (reason) => {
+          reject(reason);
+        }
+      );
+
+    });
   }
 
   _postMessage(action) {
@@ -67,48 +103,12 @@ class App extends Component {
     }
   }
 
-  _handleCheck(evt, newVal, filterId) {
-    var enabledIdx = this._enabledFilters.indexOf(filterId);
-    var exclusionIdx = this._exclusionFilters.indexOf(filterId);
-    var inclusionIdx = this._inclusionFilters.indexOf(filterId);
-    var willForce = evt.nativeEvent.shiftKey;
-    // If we are changing the force, don't toggle
-    if (willForce) {
-      newVal = !newVal;
-    }
-    console.log(enabledIdx, exclusionIdx, inclusionIdx, willForce, newVal);
-
-    // Enable the checkbox
-    if (newVal) {
-      // Remove it from exclusion, if it was there
-      if (exclusionIdx !== -1) { this._exclusionFilters.splice(exclusionIdx, 1); }
-      // Add it to inclusion, if force and it's not already
-      if (willForce && inclusionIdx === -1) { this._inclusionFilters.push(filterId); }
-      // Remove it from inclusion, if force and it is already
-      else if (willForce && inclusionIdx !== -1) { this._inclusionFilters.splice(inclusionIdx, 1); }
-      // Add it to enabled, if not already there
-      if (enabledIdx === -1) { this._enabledFilters.push(filterId); }
-    }
-    // Disable the checkbox
-    else {
-      // Remove it from inclusion, if it was there
-      if (inclusionIdx !== -1) { this._inclusionFilters.splice(inclusionIdx, 1); }
-      // Remove it from enabled, if it was there
-      if (enabledIdx !== -1) { this._enabledFilters.splice(enabledIdx, 1); }
-      // Add it to exclusion, if force and not already there
-      if (willForce && exclusionIdx === -1) { this._exclusionFilters.push(filterId); }
-      // Remove it from exclusion, if not force
-      else if (willForce && exclusionIdx !== -1) { this._exclusionFilters.splice(exclusionIdx, 1); }
-    }
-
-    this.setState({
-      enabledFilters: this._enabledFilters,
-      exclusionFilters: this._exclusionFilters,
-      inclusionFilters: this._inclusionFilters,
+  _handleFilterChange() {
+    var scenes = SceneMap.filterScenes(this._filters);
+    this.setState({ 
+      scenes: scenes,
+      episodes: EpisodeMap.filterEpisodes(scenes)
     });
-
-    this.scenes = SceneMap.filterScenes(this._enabledFilters, this._exclusionFilters, this._inclusionFilters);
-    console.log(this.scenes);
   }
 
   _handleSeekTime(evt) {
@@ -155,8 +155,6 @@ class App extends Component {
         <header className="App-header">
           <img src="images/got-logo-white.png" alt="logo" style={{ opacity: 0.05 }}/>
         </header>
-        <p className="App-intro">
-        </p>
         {/*
         <div className="player" style={{width:"800px", height:"400px", backgroundColor:"black"}}>
           <object id="ifp" data="ifphls.swf" type="application/x-shockwave-flash" width="100%" height="100%">
@@ -172,24 +170,24 @@ class App extends Component {
           </object>
         </div>
         */}
-        <button onClick={this._launchHBOWindow.bind(this)}>Launch HBO</button>
-        <br/><br/>
-        <button onClick={(__e) => this._postMessage("toggle")}>{this.state.isPlaying ? "Pause" : "Play"}</button>
-        <br/><br/>
-        <input type="number" value={this.state.seekTime} onChange={this._handleSeekTime.bind(this)} />
-        <button onClick={(__e) => this._postMessage("seek")}>Seek</button>
-        <div className="categoryContainer">
-          { Filters.characters.map((char) => (
-            <Checkbox key={char.id} label={char.name} 
-              checked={this.state.enabledFilters.indexOf(char.id) !== -1} 
-              checkedIcon={this.state.inclusionFilters.indexOf(char.id) === -1 ? <CheckBox/> :  <AddBox/>}
-              uncheckedIcon={this.state.exclusionFilters.indexOf(char.id) === -1 ? <CheckBoxOutlineBlank/> :  <IndeterminateCheckBox/>}
-              onCheck={(evt, newVal) => this._handleCheck(evt, newVal, char.id)}/>
-          ))
-          }
+        { /*
+        <div id="PlayerControlSection">
+          <button onClick={this._launchHBOWindow.bind(this)}>Launch HBO</button>
+          <br/><br/>
+          <button onClick={(__e) => this._postMessage("toggle")}>{this.state.isPlaying ? "Pause" : "Play"}</button>
+          <br/><br/>
+          <input type="number" value={this.state.seekTime} onChange={this._handleSeekTime.bind(this)} />
+          <button onClick={(__e) => this._postMessage("seek")}>Seek</button>
         </div>
-        <div style={{ position: "absolute", bottom: 0, left: 0 }}>{this.state.currentPosition}</div>
-        <div style={{ position: "absolute", bottom: 0, right: 0 }}>{this.state.connection}</div>
+        */ }
+        { /* <WICSceneList scenes={this.state.scenes} /> */ }
+        <WICEpisodeList episodes={this.state.episodes} />
+        <WICFilterAutoComplete />
+        <WICFilterContainer filters={this._filters} onFilterChange={this._handleFilterChange.bind(this)}/>
+        <div id="StatusSection">
+          <div>{this.state.connection}</div>
+          <div>{this.state.currentPosition}</div>
+        </div>
       </div>
     );
   }

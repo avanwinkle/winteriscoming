@@ -1,0 +1,18 @@
+.episodeContainer {
+  text-align: left
+}
+
+.episodeHeader {
+  display: flex;
+}
+
+.episodeTile {
+  background-size: cover;
+  width: 100px;
+  height: 80px;
+  flex: 0 0 100px;
+}
+
+.episodeMetadata {
+  flex: 1 1 100%;
+}
