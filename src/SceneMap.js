@@ -1,4 +1,5 @@
 import SpreadsheetEntry from "./SpreadsheetEntry";
+import Filters from "./Filters";
 import Utils from "./Utils";
 
 class SceneMapBase {
@@ -9,7 +10,6 @@ class SceneMapBase {
     fetch("https://spreadsheets.google.com/feeds/list/1iSeYTRX2h7IJHLIa0oFuKirI3SxsXQkqoMkFsv5Aer4/od6/public/values?alt=json")
       .then(res => res.json()).then(
         (result) => {
-          console.log("Got some json!", result);
           result.feed.entry.forEach((sceneEntry) => {
             this.scenes.push(new Scene(sceneEntry));
           });
@@ -24,7 +24,6 @@ class SceneMapBase {
   }
 
   filterScenes(filters) {
-    console.log(filters.enabled, filters.excluded, filters.included);
     // No filters? Return everything
     if (filters.enabled.length === 0 && filters.excluded.length === 0) {
       return this.scenes;
@@ -86,6 +85,13 @@ class Scene extends SpreadsheetEntry {
     this.duration = this.endtime - this.starttime;
     this.durationString = Utils.durationToString(this.duration);
     this.filters = this.characters.concat(this.houses, this.locations, this.storylines);
+
+    // Validate all the filters
+    this.filters.forEach((filt) => {
+      if (!Filters.get(filt)) {
+        console.warn("Unknown filter '" + filt +"' not found in Filters");
+      }
+    });
   }
 }
 

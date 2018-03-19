@@ -72,9 +72,8 @@ class WICFilterContainer extends Component {
   }
 
   render() {
-    console.log(blueGrey900);
     return (
-      <div id="FilterSection" style={{ backgroundColor: blueGrey200 }}>
+      <div id="FilterSection" style={{ backgroundColor: blueGrey200 }} className={"FilterSection" + (this.state.showFilterDrawer ? "Expanded" : "Hidden")}>
         <div className="filtersViewTitlebar">
           <FlatButton label={(this.state.showFilterDrawer ? "Hide" : "Show" ) + " Filters"} 
             primary={true} onClick={this._handleToggle.bind(this)} />

@@ -1,9 +1,11 @@
 .episodeContainer {
-  text-align: left
+  text-align: left;
+  max-width: 300px;
 }
 
 .episodeHeader {
   display: flex;
+  background-color: #333344;
 }
 
 .episodeTile {
@@ -15,4 +17,44 @@
 
 .episodeMetadata {
   flex: 1 1 100%;
+}
+
+.episodeSceneListContainer {
+}
+
+.episodeSceneListItem {
+  display: flex;
+  line-height: 18pt;
+}
+
+.episodeSceneStatePast {
+  color: #666;
+}
+
+.episodeSceneStateCurrent {
+  font-weight: bold;
+  background-color: #6b0e0e;
+}
+
+.episodeSceneListItem:hover .episodeSceneListPlay {
+  opacity: 1;
+}
+
+.episodeSceneListPlay {
+  padding: 0 4px;
+  opacity: 0;
+  cursor: pointer;
+  line-height: 0;
+}
+
+.episodeSceneListItemName {
+  flex: 1 0 auto;
+}
+
+.episodeSceneListItemDuration {
+  flex: 0 0 auto;
+  padding-right: 8px;
+  font-size: 80%;
+  font-weight: lighter;
+  vertical-align: baseline;
 }

@@ -4,6 +4,7 @@ import EpisodeMap from "./EpisodeMap";
 import WICEpisodeList from "./WICEpisodeList";
 import WICFilterAutoComplete from "./WICFilterAutoComplete";
 import WICFilterContainer from "./WICFilterContainer";
+import WICPlayer from "./WICPlayer";
 import WICSceneList from "./WICSceneList";
 import "./App.css";
 
@@ -14,7 +15,10 @@ class App extends Component {
   constructor(props) {
     super(props);
     this.targetWindow = undefined;
+    this._onTargetWindowReady = [];
     this.connectionState = "NOT_CONNECTED";
+    this._pollingCount = 0;
+    this._pendingScene = undefined;
     
     this._filters = {
       enabled: [],   // List of ids of ALL filters, sorted by priority
@@ -28,6 +32,8 @@ class App extends Component {
       scenes: [],
       episodes: [],
       currentPosition: 0,
+      currentScene: undefined,
+      nextScene: undefined,
       connection: this.connectionState,
     };
 
@@ -37,7 +43,8 @@ class App extends Component {
           var scenes = SceneMap.filterScenes(this._filters);
           this.setState({ 
             scenes: scenes,
-            episodes: EpisodeMap.filterEpisodes(this.state.scenes)
+            episodes: EpisodeMap.filterEpisodes(scenes),
+            currentScene: scenes[0],
           });
         });
       });
@@ -72,80 +79,218 @@ class App extends Component {
     });
   }
 
-  _postMessage(action) {
-    var param;
-    if (action === "seek") {
+  _getCurrentEpisode() {
+    return EpisodeMap.getEpisode((this.state.currentScene ? this.state.currentScene : this.state.scenes[0]).seasonepisode);
+  }
+
+  _getNextScene(scenes, currentScene) {
+    scenes = scenes || this.state.scenes;
+    currentScene = currentScene || this.state.currentScene;
+    var currentIdx = scenes.indexOf(currentScene);
+    var nextScene;
+
+    // If the current scene does not exist in the list of scenes, find the appropriate next one
+    // based on the timestamp and the current play position, i.e. whichever would be next in time
+    if (currentIdx !== -1) {
+      scenes.forEach((scene) => {
+        if (nextScene === undefined && scene.starttime > currentScene.starttime) {
+          nextScene = scene;
+        }
+      });
+    } 
+    // If the current scene does exist, the next scene will be next (if we're not at the end of the array)
+    else if (currentIdx < scenes.length - 1) {
+      nextScene = scenes[currentIdx + 1];
+    }
+    // Otherwise, there is no next scene
+    
+    return nextScene;
+  }
+
+  goToScene(scene) {
+    if (scene === undefined) { 
+      console.warn("Unable to go to scene undefined");
+      return;
+    }
+    // Store the upcoming scene synchronously in case position updates come in before we can seek to it
+    this._pendingScene = scene;
+    this.setState({
+      currentScene: scene,
+      nextScene: this._getNextScene(undefined, scene),
+      seekTime: scene.starttime,
+    });
+    this._postMessage("seek", scene.starttime);
+  }
+
+  _postMessage(action, param) {
+    if (action === "seek" && param === undefined) {
       param = parseInt(this.state.seekTime, 10);
     } else if (action === "toggle") {
       action = this.state.isPlaying ? "pause" : "play";
+      this.setState({ isPlaying: !this.state.isPlaying });
     }
 
-    if (!this.targetWindow) { this._launchHBOWindow(); }
+    var postControlAction = () => {
+      this.targetWindow.postMessage({
+        message: "wic-controlaction",
+        action: action,
+        param: param,
+      }, hboUri);
+    };
 
-    this.targetWindow.postMessage({
-      message: "wic-controlaction",
-      action: action,
-      param: param,
-    }, hboUri);
-    console.log(" - POSTED!");
-    this.setState({ isPlaying: !this.state.isPlaying });
+    if (!this.targetWindow) { 
+      console.log("no target window, going to cache postcontrol action '"+ action + "' with param ", param);
+      this._onTargetWindowReady.push(postControlAction);
+      this._connectHBOWindow();
+    } else {
+      postControlAction();
+    }
+
   }
 
   _receiveMessage(event) {
-    console.log(event);
     if (event.data.message === "handshake_received") {
-      console.log("HANDSHAKE!");
+      console.log("Handshake received!");
       this.connectionState = "CONNECTED";
       this.setState({ connection: this.connectionState });
     }
-    if (event.data.message === "position") {
-      this.setState({ currentPosition: event.data.value });
+    else if (event.data.message === "reconnect_request") {
+      this._postMessage("reconnect_response");
     }
+    else if (event.data.message === "position") {
+      this._updatePosition(event.data.value);
+    }
+  }
+
+  _updatePosition(newPosition) {
+    // If we are expecting a new scene, don't do anything
+    if (this._pendingScene) {
+      if (newPosition === this._pendingScene.starttime) {
+        console.log("Found position at pending scene! Hurray scene change complete!");
+        this._pendingScene = undefined;
+      } else {
+        console.log("Position update " + newPosition + " but a new scene is pending at " + this._pendingScene.starttime);
+      }
+    }
+    // If the position is before our current scene, skip ahead
+    else if (newPosition < this.state.currentScene.starttime) {
+      console.log("Playback position is before current scene, skipping ahead.");
+      this._postMessage("seek", this.state.currentScene.starttime);
+    }
+    // If the position at the end of our current scene and before the next scene, skip to the next
+    else if (newPosition > this.state.currentScene.endtime && newPosition < this.state.nextScene.starttime) {
+      console.log("Playback position " + newPosition + " is after current scene endtime " + this.state.currentScene.endtime + ", advancing");
+      this._goToScene(this.state.nextScene);
+    }
+    // If we've magically transition into the next scene
+    else if (newPosition > this.state.nextScene.starttime) {
+      console.log("Playback has automatically transitioned into another scene");
+      this.setState({
+        currentScene: this.state.nextScene,
+        nextScene: this._getNextScene(undefined, this.state.nextScene),
+      });
+    }
+    this.setState({ currentPosition: newPosition });
   }
 
   _handleFilterChange() {
     var scenes = SceneMap.filterScenes(this._filters);
     this.setState({ 
       scenes: scenes,
-      episodes: EpisodeMap.filterEpisodes(scenes)
+      episodes: EpisodeMap.filterEpisodes(scenes),
+      nextScene: this._getNextScene(scenes),
     });
   }
 
-  _handleSeekTime(evt) {
-    this.setState({ seekTime: evt.target.value });
+  _handlePlay() {
+    this.setState({
+      currentScene: this.state.currentScene || this.state.scenes[0],
+      nextScene: this.state.nextScene || this.state.scenes[1],
+    });
+    this._postMessage("toggle");
   }
 
-  _launchHBOWindow() {
-    console.log("Launching HBO!");
-    this.connectionState = "NOT_CONNECTED";
-    
-    var episodeId = "GVVD52AFtf8NosSQJAAGb";
-    this.targetWindow = window.open(
-      hboUri + "/episode/urn:hbo:episode:" + episodeId + "?autoplay=true",
-      "WIC-HBOWindow",
-      "width=800,height=600");
-    window.addEventListener("message", this._receiveMessage.bind(this));
-    this.connectionState = "OPENING";
+  _handleNav(action) {
+    switch (action) {
+      case "nextScene":
+        this._goToScene(this._getNextScene());
+        break;
+      case "firstScene":
+        this._goToScene(this.state.scenes[0]);
+        break;
+    }
+  }
+
+  // _handleSeekTime(evt) {
+  //   this.setState({ seekTime: evt.target.value });
+  // }
+
+  _connectHBOWindow() {
+    if (!this.targetWindow) {
+      // Attempt to connect to an existing window
+      this.targetWindow = window.open(
+        undefined,
+        "WIC-HBOWindow",
+        "width=800,height=600");
+      console.log(this.targetWindow);
+
+      // if (this.targetWindow.origin !== hboUri) {
+      
+      // } else {
+      //   console.log("Target window is already at HBO, attempting to reconnect.");
+      this.connectionState = "RECONNECTING";
+      // }
+      // Ping for a response, see if a target window exists
+      window.addEventListener("message", this._receiveMessage.bind(this));
+    }
+
     this._startHandshake();
   }
 
+  _launchHBOWindow() {
+    console.log("Target window is not at HBO, reloading");
+    this.targetWindow = window.open(
+      hboUri + "/episode/" + this._getCurrentEpisode().hboid + "?autoplay=true",
+      "WIC-HBOWindow",
+      "width=800,height=600");
+    this.connectionState = "OPENING";
+  }
+
+
   _startHandshake() {
+    this.setState({ connection: this.connectionState });
+    
     if (!this.targetWindow) {
       console.error("Cannot check handshake without target window");
       return;
     }
     else if (this.connectionState === "OPENING") {
       this.connectionState = "POLLING";
-      this.targetWindow.postMessage({ message: "handshake_request" }, hboUri);  
+      this._pollingCount = 0;
     }
-    else if (this.connectionState === "POLLING") {
+    else if (this.connectionState === "RECONNECTING") {
+      if (this._pollingCount < 1) {
+        console.log("Waiting for existing target window to reconnect...");
+        this._pollingCount++;
+      } else {
+        console.log(" - Existing window does not exist or did not respond.");
+        this._launchHBOWindow();
+      }
+    }
+    else if (this.connectionState === "POLLING" && this._pollingCount < 30) {
       console.log("Polling target window for handshake...", this.connectionState);
-      this.setState({ connection: this.connectionState });
+      this._pollingCount++;
+    }
+    else if (this.connectionState === "CONNECTED") {
+      console.log("Connected to HBO Window successful, calling " + this._onTargetWindowReady.length + " callbacks");
+      this._onTargetWindowReady.forEach((readyFn) => { readyFn(); });
+      return;
     }
     else {
       console.log("Inactive connection state '" + this.connectionState + "', cancelling poll.");
       return;
     }
+    this.targetWindow.postMessage({ message: "handshake_request" }, hboUri);  
     setTimeout(this._startHandshake.bind(this), 1000);
   }
 
@@ -155,7 +300,7 @@ class App extends Component {
         <header className="App-header">
           <img src="images/got-logo-white.png" alt="logo" style={{ opacity: 0.05 }}/>
         </header>
-        {/*
+        { /*
         <div className="player" style={{width:"800px", height:"400px", backgroundColor:"black"}}>
           <object id="ifp" data="ifphls.swf" type="application/x-shockwave-flash" width="100%" height="100%">
             <param name="FlashVars" value="videoId=1920&amp;loadVideo=http%3A%2F%2Fhls3.pro11.lv3.cdn.hbogo.com%2Fvideos%2FPRO11%2Fgov2%2Fe5%2Fhbo%2Ffeature%2F634424%2F263255_820888e59fb76b1172e7a649d35dcc7d%2Fhbo_263255_820888e59fb76b1172e7a649d35dcc7d_PRO11%2Fbase_index_c9_14_access.m3u8&amp;setDRMToken=BtOuhn3VIEVd" />
@@ -169,19 +314,21 @@ class App extends Component {
             <param name="play" value="true" />
           </object>
         </div>
-        */}
-        { /*
-        <div id="PlayerControlSection">
-          <button onClick={this._launchHBOWindow.bind(this)}>Launch HBO</button>
-          <br/><br/>
-          <button onClick={(__e) => this._postMessage("toggle")}>{this.state.isPlaying ? "Pause" : "Play"}</button>
-          <br/><br/>
-          <input type="number" value={this.state.seekTime} onChange={this._handleSeekTime.bind(this)} />
-          <button onClick={(__e) => this._postMessage("seek")}>Seek</button>
-        </div>
         */ }
-        { /* <WICSceneList scenes={this.state.scenes} /> */ }
-        <WICEpisodeList episodes={this.state.episodes} />
+        <div id="PlayerControlSection" style={{ position: "absolute", top: 0, left: 0, textAlign: "left"}}>
+          { /* <button onClick={this._connectHBOWindow.bind(this)}>Launch HBO</button> */ }
+          <br/><br/>
+          <button onClick={(__e) => this._handleNav("firstScene")}>&lt;&lt; Start from Beginning</button>
+          <button onClick={(__e) => this._handlePlay()}>{this.state.isPlaying ? "Pause" : "Play"}</button>
+          <button onClick={(__e) => this._handleNav("nextScene")} enabled={(!!this.state.nextScene).toString()}>Next Scene &gt;</button>
+          <br/><br/>
+          {/*
+            <input type="number" value={this.state.seekTime} onChange={this._handleSeekTime.bind(this)} />
+            <button onClick={(__e) => this._postMessage("seek")}>Seek</button>
+          */}
+        </div>
+        { /* <WICPlayer /> */ }
+        <WICEpisodeList episodes={this.state.episodes} currentScene={this.state.currentScene} onScenePlay={this.goToScene.bind(this)}/>
         <WICFilterAutoComplete />
         <WICFilterContainer filters={this._filters} onFilterChange={this._handleFilterChange.bind(this)}/>
         <div id="StatusSection">

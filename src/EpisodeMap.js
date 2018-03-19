@@ -29,6 +29,10 @@ class EpisodeMapBase {
     console.log(this.episodes);
   }
 
+  getEpisode(epid) {
+    return this._episodesById[epid];
+  }
+
   fetchEpisodeMetadata(access_token, episode_urns) {
     return new Promise((resolve, reject) => {
       // For the first request get the series URN, subsequent requests use an episode urn

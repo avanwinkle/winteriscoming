@@ -8,6 +8,9 @@
   left: 0; right: 0; bottom: 0;
   padding: 0 8px 4px 8px;
 }
+.FilterSectionExpanded {
+  height: 500px;
+}
 
 .filtersViewTitlebar {
   text-align: right;
