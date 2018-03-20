@@ -17,6 +17,8 @@ class SpreadsheetEntry {
       return value !== "" ? value.split(/, ?/) : [];
     } else if (value.match(/^\d+$/)) {
       return parseInt(value, 10);
+    } else if (value.match(/^(\d{1,3},)?(\d{1,3})(\.?\d+)$/)) {
+      return parseFloat(value.replace(",", ""), 10);
     } else {
       return value !== "" ? value : undefined;
     }

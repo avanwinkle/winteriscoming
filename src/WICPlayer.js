@@ -6,8 +6,11 @@ class WICPlayer extends Component {
     return (
       <div className="WICPlayerContainer">
         <iframe title="Player"
+          id="WICPlayerFrame"
           className="WICPlayerFrame"
-          src="http://localhost.hadron.aws.hbogo.com:3000/extra/urn:hbo:extra:GVU3NGQRWDI7DwvwIAXbD"></iframe>
+          allowFullScreen="true"
+          scrolling="no"
+          src={this.props.src}></iframe>
       </div>
     );
   }

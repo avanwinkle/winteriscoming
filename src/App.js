@@ -8,6 +8,7 @@ import WICPlayer from "./WICPlayer";
 import WICSceneList from "./WICSceneList";
 import "./App.css";
 
+const useIFrame = false;
 const hboUri = "http://localhost.hadron.aws.hbogo.com:3000";
 // const wicUri = "http://localhost.hadron.aws.hbogo.com:4000"
 
@@ -38,45 +39,22 @@ class App extends Component {
     };
 
     SceneMap.onReady((__scenes) => {
-      EpisodeMap.onReady((__episodes) => {
-        this._fetchTokenAndEpisodes().then(() => {
-          var scenes = SceneMap.filterScenes(this._filters);
-          this.setState({ 
-            scenes: scenes,
-            episodes: EpisodeMap.filterEpisodes(scenes),
-          });
-          this._connectHBOWindow(true);
-        });
+      var scenes = SceneMap.filterScenes(this._filters);
+      this.setState({ 
+        scenes: scenes,
+        episodes: EpisodeMap.filterEpisodes(scenes),
       });
+      console.log(scenes);
+      this._connectHBOWindow(true);
     });
   }
 
   componentDidMount() {
   }
 
-  _fetchTokenAndEpisodes() {
-    return new Promise((resolve, reject) => {
-      fetch("https://comet.api.hbo.com/tokens", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          "client_id":"88a4f3c6-f1de-42d7-8ef9-d3b00139ea6a",
-          "client_secret":"88a4f3c6-f1de-42d7-8ef9-d3b00139ea6a",
-          "scope":"browse video_playback_free",
-          "grant_type":"client_credentials",
-        }),
-      }).then(res => res.json()).then(
-        (response) => {
-          this._hurleyToken = response.access_token;
-          resolve(EpisodeMap.fetchEpisodeMetadata(this._hurleyToken));
-        }, (reason) => {
-          reject(reason);
-        }
-      );
-
-    });
+  _generateTargetUri() {
+    var epid = this.state.currentScene ? this._getCurrentEpisode().hboid : "urn:hbo:episode:GVU4NYgvPQlFvjSoJAbmL";
+    return hboUri + "/episode/" + epid + "?autoplay=true";
   }
 
   _getCurrentEpisode() {
@@ -130,12 +108,23 @@ class App extends Component {
     }
     // Store the upcoming scene synchronously in case position updates come in before we can seek to it
     this._pendingScene = scene;
+
+    var episode = EpisodeMap.getEpisode(scene.seasonepisode);
+    if (episode === this._getCurrentEpisode()) {
+      this._postMessage("seek", scene.starttime);
+    } else {
+      this.targetWindow.postMessage({
+        message: "play_episode",
+        episodeId: episode.hboid,
+        seekTime: scene.starttime,
+      }, hboUri);
+    }
+
     this.setState({
       currentScene: scene,
       nextScene: this._getNextScene(undefined, scene),
       seekTime: scene.starttime,
     });
-    this._postMessage("seek", scene.starttime);
   }
 
   _postMessage(action, param) {
@@ -253,12 +242,19 @@ class App extends Component {
 
   _connectHBOWindow(isAuto) {
     if (!this.targetWindow) {
+      if (useIFrame) {
+        console.log("iFrame mode, not connecting to a window");
+        this.targetWindow = document.getElementById("WICPlayerFrame").contentWindow;
+        this.connectionState = "OPENING";
+      }
       // Attempt to connect to an existing window
-      this.targetWindow = window.open(
-        undefined,
-        "WIC-HBOWindow",
-        "width=800,height=600");
-      this.connectionState = isAuto ? "AUTOCONNECTING" : "RECONNECTING";
+      else {
+        this.targetWindow = window.open(
+          undefined,
+          "WIC-HBOWindow",
+          "width=800,height=600");
+        this.connectionState = isAuto ? "AUTOCONNECTING" : "RECONNECTING";
+      }
       window.addEventListener("message", this._receiveMessage.bind(this));
     }
     // Ping for a response, see if a target window exists
@@ -267,10 +263,14 @@ class App extends Component {
 
   _launchHBOWindow() {
     console.log("Target window is not at HBO, reloading");
-    this.targetWindow = window.open(
-      hboUri + "/episode/" + this._getCurrentEpisode().hboid + "?autoplay=true",
-      "WIC-HBOWindow",
-      "width=800,height=600");
+    if (useIFrame) {
+      this.targetWindow.src = this._generateTargetUri();
+    } else {
+      this.targetWindow = window.open(
+        this._generateTargetUri(),
+        "WIC-HBOWindow",
+        "width=800,height=600");
+    }
     this.connectionState = "OPENING";
   }
 
@@ -290,8 +290,8 @@ class App extends Component {
       if (this._pollingCount < 1) {
         console.log("Waiting for existing target window to reconnect...");
         this._pollingCount++;
-      } else {
-        console.log(" - Existing window does not exist or did not respond.");
+      } else if (!useIFrame) {
+        console.log(" - Existing window does not exist or did not respond. Launching a new one.");
         // If we manually attempted to reconnect, launch a window.
         this._launchHBOWindow();
       }
@@ -335,7 +335,7 @@ class App extends Component {
         </div>
         */ }
         <div id="PlayerControlSection" style={{ position: "absolute", top: 0, left: 0, textAlign: "left"}}>
-          { /* <button onClick={this._connectHBOWindow.bind(this)}>Launch HBO</button> */ }
+          <button onClick={(__e) => this._playEpisode(this.state.episodes[1])}>Get Uri</button>
           <br/><br/>
           <button onClick={(__e) => this._handleNav("firstScene")}>&lt;&lt; Start from Beginning</button>
           <button onClick={(__e) => this._handlePlay()}>{this.state.isPlaying ? "Pause" : "Play"}</button>
@@ -346,13 +346,19 @@ class App extends Component {
             <button onClick={(__e) => this._postMessage("seek")}>Seek</button>
           */}
         </div>
-        { /* <WICPlayer /> */ }
-        <WICEpisodeList episodes={this.state.episodes} currentScene={this.state.currentScene} onScenePlay={this.goToScene.bind(this)}/>
+        { useIFrame && (
+          <WICPlayer src={this.state.currentScene ? this._generateTargetUri() : hboUri}/>
+        )}
+        <WICEpisodeList 
+          episodes={this.state.episodes} 
+          currentScene={this.state.currentScene} 
+          onScenePlay={this.goToScene.bind(this)}
+        />
         <WICFilterAutoComplete />
         <WICFilterContainer filters={this._filters} onFilterChange={this._handleFilterChange.bind(this)}/>
         <div id="StatusSection">
           <div>{this.state.connection}</div>
-          <div>{this.state.currentPosition}</div>
+          <div>{parseInt(this.state.currentPosition)}</div>
         </div>
       </div>
     );

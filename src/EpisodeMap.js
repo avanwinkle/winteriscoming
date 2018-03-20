@@ -3,40 +3,31 @@ import Utils from "./Utils";
 
 const GOT_SERIES_URN = "urn:hbo:series:GVU2cggagzYNJjhsJATwo";
 
-class EpisodeMapBase {
-  constructor() {
-    this.episodes = [];
-    this._episodesById = {};
-    this._onReady = [];
-    this._fetchAttempts = 0;
+const hurleyToken = new Promise((resolve, reject) => {
+  fetch("https://comet.api.hbo.com/tokens", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      "client_id":"88a4f3c6-f1de-42d7-8ef9-d3b00139ea6a",
+      "client_secret":"88a4f3c6-f1de-42d7-8ef9-d3b00139ea6a",
+      "scope":"browse video_playback_free",
+      "grant_type":"client_credentials",
+    }),
+  }).then(res => res.json()).then(
+    (response) => {
+      resolve(response.access_token);
+    }, (reason) => {
+      reject(reason);
+    }
+  );
+});
 
-    fetch("https://spreadsheets.google.com/feeds/list/1iSeYTRX2h7IJHLIa0oFuKirI3SxsXQkqoMkFsv5Aer4/2/public/values?alt=json#gid=984213785")
-      .then(res => res.json()).then(
-        (result) => {
-          result.feed.entry.forEach((episodeEntry) => {
-            var ep = new Episode(episodeEntry);
-            this.episodes.push(ep);
-            this._episodesById[ep.id] = ep;
-          });
-          this.episodes.sort((a, b) => a.id - b.id);
-
-          this._onReady.forEach((callbackFn) => {
-            callbackFn.apply(null, [this.episodes]);
-          });
-          this._onReady = undefined;
-        }
-      );
-    console.log(this.episodes);
-  }
-
-  getEpisode(epid) {
-    return this._episodesById[epid];
-  }
-
-  fetchEpisodeMetadata(access_token, episode_urns) {
-    return new Promise((resolve, reject) => {
+const _generateCometRequest = function(body) {
+  return new Promise((resolve, reject) => {
+    hurleyToken.then((access_token) => {
       // For the first request get the series URN, subsequent requests use an episode urn
-      var body = episode_urns ? episode_urns.map((urn) => ({"id": urn})) : [{"id": GOT_SERIES_URN}];
       fetch("https://comet.api.hbo.com/content", {
         body: JSON.stringify(body),
         method: "POST",
@@ -47,8 +38,71 @@ class EpisodeMapBase {
           "x-b3-traceid": "f97447dc-045f-41aa-94f2-8a4aca0154c3-2b6aacbc-80bd-4d63-e554-ca27d3c694f4",
           "x-hbo-client-version": "Hadron/14.1.0.15 desktop (DESKTOP)",
         }
-      }).then((res) => res.json()).then((response) => {
-        response.forEach((metadata) => {
+      }).then((res) => res.json()).then(
+        (response) => { resolve(response); },
+        (reason) => { reject(reason); }
+      );
+    });
+  });
+};
+
+class EpisodeMapBase {
+  constructor() {
+    this.episodes = [];
+    this._episodesById = {};
+    this._onReady = [];
+    this._fetchAttempts = 0;
+
+    fetch(
+      "https://spreadsheets.google.com/feeds/list/1iSeYTRX2h7IJHLIa0oFuKirI3SxsXQkqoMkFsv5Aer4/2/public/values?alt=json#gid=984213785"
+    ).then((res) => res.json()).then((result) => {
+      this._fetchMetadataForEpisodes(result).then(() => {
+        this._onReady.forEach((callbackFn) => {
+          callbackFn.apply(null, [this.episodes]);
+        });
+        this._onReady = undefined;
+      });
+    });
+      
+  }
+
+  getEpisode(epid) {
+    if (!this._episodesById[epid]) {
+      console.warn("Unable to retrieve episode ", epid);
+    }
+    return this._episodesById[epid];
+  }
+
+  _fetchMetadataForEpisodes(episodeEntries) {
+    // Store all the episodes we require metadata for
+    var requiredEpisodes = [];
+    var episodesByUrn = {};
+    episodeEntries.feed.entry.forEach((episodeEntry) => {
+      var ep = new Episode(episodeEntry);
+      this.episodes.push(ep);
+      this._episodesById[ep.id] = ep;
+      requiredEpisodes.push(ep.hboid);
+      episodesByUrn[ep.hboid] = ep;
+    });
+    this.episodes.sort((a, b) => a.id - b.id);
+
+    var episodeBatches = [];
+    while (requiredEpisodes.length > 32) {
+      episodeBatches.push(this.fetchEpisodeMetadata(requiredEpisodes.splice(0, 32)));
+    }
+    episodeBatches.push(this.fetchEpisodeMetadata(requiredEpisodes));
+
+    return Promise.all(episodeBatches).then((cometBatchResponses) => {
+      cometBatchResponses.forEach((cometResponse) => {
+        cometResponse.forEach((metadata) => {
+          // Edit for a viewable?
+          if (metadata.id.indexOf("urn:hbo:edit") === 0 && episodesByUrn[metadata.body.references.viewable]) {
+            var editEpisode = episodesByUrn[metadata.body.references.viewable];
+            editEpisode.edits.push(metadata.body);
+            if (metadata.body.quality === "HD" && metadata.body.language === "en-US" && metadata.body.audio === "5.1 Surround") {
+              editEpisode.videoUrn = metadata.body.references.video;
+            }
+          }
           // Not an episode of GoT? Ignore it
           if (metadata.id.indexOf("urn:hbo:episode") === -1 || metadata.body.references.series !== GOT_SERIES_URN) { 
             return; 
@@ -67,30 +121,33 @@ class EpisodeMapBase {
               .replace("{{protection}}", "false")
               .replace("{{scaleDownToFit}}", "false");
           });
-
-          if (episode.duration !== metadata.body.duration) { console.info("Episode " + episode.id + " '" + metadata.body.titles.full + "' needs duration " + metadata.body.duration); }
-          
+          // Apply other attributes from metadata
+          episode.duration = metadata.body.duration;
+          episode.title = metadata.body.titles.full;
         });
-
-        // If we have episodes that haven't been populated yet, fetch them
-        var missingEpisodes = this.episodes.filter((ep) => ep.images.tile === undefined).map((ep) => ep.hboid);
-        if (missingEpisodes.length) {
-          this._fetchAttempts++;
-          if (this._fetchAttempts > 5) {
-            console.warn("Too many attempts to fetch!");
-            reject();
-            return;
-          } else {
-            console.log("Found " + missingEpisodes.length + " episodes without metadata, fetching more...", missingEpisodes);
-            resolve(this.fetchEpisodeMetadata(access_token, missingEpisodes));
-          }
-        } else {
-          console.log("Fetching episodes complete!");
-          resolve();
-        }
       });
 
+      // If we have episodes that haven't been populated yet, fetch them
+      var missingEpisodes = this.episodes.filter((ep) => ep.images.tile === undefined).map((ep) => ep.hboid);
+      if (missingEpisodes.length) {
+        this._fetchAttempts++;
+        if (this._fetchAttempts > 5) {
+          console.warn("Too many attempts to fetch!");
+          return;
+        } else {
+          console.log("Found " + missingEpisodes.length + " episodes without metadata, fetching more...", missingEpisodes);
+          return this.fetchEpisodeMetadata(missingEpisodes);
+        }
+      } else {
+        console.log("Fetching episodes complete!");
+      }
     });
+  }
+
+
+  fetchEpisodeMetadata(episode_urns) {
+    var body = episode_urns ? episode_urns.map((urn) => ({"id": urn})) : [{"id": GOT_SERIES_URN}];
+    return _generateCometRequest(body);
   }
 
   filterEpisodes(scenes) {
@@ -129,6 +186,7 @@ class Episode extends SpreadsheetEntry {
     super(episodeEntry);
     this.id = (this.season * 100) + this.episode;
     this.scenes = [];
+    this.edits = [];
     this.images = {};
   }
 }

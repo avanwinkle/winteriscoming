@@ -1,6 +1,7 @@
 import SpreadsheetEntry from "./SpreadsheetEntry";
 import Filters from "./Filters";
 import Utils from "./Utils";
+import EpisodeMap from "./EpisodeMap";
 
 class SceneMapBase {
   constructor() {
@@ -10,17 +11,23 @@ class SceneMapBase {
     fetch("https://spreadsheets.google.com/feeds/list/1iSeYTRX2h7IJHLIa0oFuKirI3SxsXQkqoMkFsv5Aer4/od6/public/values?alt=json")
       .then(res => res.json()).then(
         (result) => {
-          result.feed.entry.forEach((sceneEntry) => {
-            this.scenes.push(new Scene(sceneEntry));
+          EpisodeMap.onReady((__episodes) => {
+            this._buildSceneList(result.feed.entry);
           });
-          this._onReady.forEach((callbackFn) => {
-            callbackFn.apply(null, [this.scenes]);
-          });
-          this._onReady = undefined;
         }, (error) => {
           console.error(error);
         }
       );
+  }
+
+  _buildSceneList(sceneEntries) {
+    sceneEntries.forEach((sceneEntry) => {
+      this.scenes.push(new Scene(sceneEntry));
+    });
+    this._onReady.forEach((callbackFn) => {
+      callbackFn.apply(null, [this.scenes]);
+    });
+    this._onReady = undefined;
   }
 
   filterScenes(filters) {
@@ -82,6 +89,11 @@ class Scene extends SpreadsheetEntry {
     super(sceneEntry);
     this.seasonepisode = this.season * 100 + this.episode;
     this.id = this.seasonepisode * 100 + this.scene;
+    
+    // Scene times are tracked relative to the end, so calculate start/end points
+    var episode = EpisodeMap.getEpisode(this.seasonepisode);
+    this.starttime = episode.duration - this.inpointfromend;
+    this.endtime = episode.duration - this.outpointfromend;
     this.duration = this.endtime - this.starttime;
     this.durationString = Utils.durationToString(this.duration);
     this.filters = this.characters.concat(this.houses, this.locations, this.storylines);

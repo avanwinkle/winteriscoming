@@ -1,15 +1,20 @@
 .WICPlayerContainer {
-  width: 100%;
-  height: 0;
-  padding-top: 56%;
+  width: 574px;
+  padding-top: 323px;
   position: relative;
+  overflow: hidden;
+  border: solid 1px rgba(0,0,0,0.8);
 }
 
 .WICPlayerFrame {
   position:absolute;
   box-sizing: border-box;
+  border: 0;
   top: 0;
   left: 0;
-  width: 100%;
-  height: 100%;
+  width: calc(574px + 55px);
+  height: calc(323px + 76px);
+  /* Trim */
+  margin-top: -76px;
+  margin-left: -55px;
 }
