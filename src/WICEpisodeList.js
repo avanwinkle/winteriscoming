@@ -15,10 +15,12 @@ class EpisodeList extends Component {
   render() {
     var episodes = this.props.episodes.map((episode) => {
       var episodeState = "Future";
-      if (episode.id < this.props.currentScene.seasonepisode) {
-        episodeState = "Past";
-      } else if (episode.id === this.props.currentScene.seasonepisode) {
-        episodeState = "Current";
+      if (this.props.currentScene) { 
+        if (episode.id < this.props.currentScene.seasonepisode) {
+          episodeState = "Past";
+        } else if (episode.id === this.props.currentScene.seasonepisode) {
+          episodeState = "Current";
+        }
       }
 
       return (
@@ -34,10 +36,12 @@ class EpisodeList extends Component {
           <div className="episodeSceneListContainer">
             {episode.scenes.map((scene) => {
               var sceneState = "Future";
-              if (scene.id < this.props.currentScene.id) {
-                sceneState = "Past";
-              } else if (scene === this.props.currentScene) {
-                sceneState = "Current";
+              if (this.props.currentScene) {
+                if (scene.id < this.props.currentScene.id) {
+                  sceneState = "Past";
+                } else if (scene === this.props.currentScene) {
+                  sceneState = "Current";
+                }
               }
               return (
                 <div key={scene.id} className={"episodeSceneListItem episodeSceneState" + sceneState}>

@@ -44,8 +44,8 @@ class App extends Component {
           this.setState({ 
             scenes: scenes,
             episodes: EpisodeMap.filterEpisodes(scenes),
-            currentScene: scenes[0],
           });
+          this._connectHBOWindow(true);
         });
       });
     });
@@ -83,15 +83,31 @@ class App extends Component {
     return EpisodeMap.getEpisode((this.state.currentScene ? this.state.currentScene : this.state.scenes[0]).seasonepisode);
   }
 
+  _getSceneByPosition(position) {
+    var nextCurrentScene = this.state.scenes[0];
+    var nextNextScene = this._getNextScene(undefined, nextCurrentScene);
+
+    if (position < nextCurrentScene.endtime) {
+      console.log("Playback has automatically transitioned into another scene");
+    } else {
+      console.log("Playback is far ahead of the current scene, skipping forward...");
+      while (nextNextScene !== undefined && position > nextNextScene.starttime) {
+        nextCurrentScene = nextNextScene;
+        nextNextScene = this._getNextScene(undefined, nextNextScene);
+      }
+    }
+    return nextCurrentScene;
+  }
+
   _getNextScene(scenes, currentScene) {
     scenes = scenes || this.state.scenes;
-    currentScene = currentScene || this.state.currentScene;
+    currentScene = currentScene || this.state.currentScene || scenes[0];
     var currentIdx = scenes.indexOf(currentScene);
     var nextScene;
 
     // If the current scene does not exist in the list of scenes, find the appropriate next one
     // based on the timestamp and the current play position, i.e. whichever would be next in time
-    if (currentIdx !== -1) {
+    if (currentIdx === -1) {
       scenes.forEach((scene) => {
         if (nextScene === undefined && scene.starttime > currentScene.starttime) {
           nextScene = scene;
@@ -158,6 +174,10 @@ class App extends Component {
       this._postMessage("reconnect_response");
     }
     else if (event.data.message === "position") {
+      // If we haven't set a current scene, set one according to the current position
+      if (this.state.currentScene === undefined) {
+        this.setState({ currentScene: this._getSceneByPosition(event.data.value) });
+      }
       this._updatePosition(event.data.value);
     }
   }
@@ -172,22 +192,28 @@ class App extends Component {
         console.log("Position update " + newPosition + " but a new scene is pending at " + this._pendingScene.starttime);
       }
     }
+    // If we don't have a current scene, find one
+    else if (this.state.currentScene === undefined) {
+      console.log("No current scene, can't update position. TODO: Find one!");
+    }
     // If the position is before our current scene, skip ahead
     else if (newPosition < this.state.currentScene.starttime) {
       console.log("Playback position is before current scene, skipping ahead.");
       this._postMessage("seek", this.state.currentScene.starttime);
     }
     // If the position at the end of our current scene and before the next scene, skip to the next
-    else if (newPosition > this.state.currentScene.endtime && newPosition < this.state.nextScene.starttime) {
+    else if (newPosition > this.state.currentScene.endtime && this.state.nextScene && newPosition < this.state.nextScene.starttime) {
       console.log("Playback position " + newPosition + " is after current scene endtime " + this.state.currentScene.endtime + ", advancing");
-      this._goToScene(this.state.nextScene);
+      this.goToScene(this.state.nextScene);
     }
-    // If we've magically transition into the next scene
-    else if (newPosition > this.state.nextScene.starttime) {
-      console.log("Playback has automatically transitioned into another scene");
+    // If we're after the start of the next scene
+    else if (this.state.nextScene && newPosition > this.state.nextScene.starttime) {
+      var nextCurrentScene = this._getSceneByPosition(newPosition);
+      var nextNextScene = this._getNextScene(undefined, this.state.nextScene);
+
       this.setState({
-        currentScene: this.state.nextScene,
-        nextScene: this._getNextScene(undefined, this.state.nextScene),
+        currentScene: nextCurrentScene,
+        nextScene: nextNextScene,
       });
     }
     this.setState({ currentPosition: newPosition });
@@ -213,10 +239,10 @@ class App extends Component {
   _handleNav(action) {
     switch (action) {
       case "nextScene":
-        this._goToScene(this._getNextScene());
+        this.goToScene(this._getNextScene());
         break;
       case "firstScene":
-        this._goToScene(this.state.scenes[0]);
+        this.goToScene(this.state.scenes[0]);
         break;
     }
   }
@@ -225,25 +251,17 @@ class App extends Component {
   //   this.setState({ seekTime: evt.target.value });
   // }
 
-  _connectHBOWindow() {
+  _connectHBOWindow(isAuto) {
     if (!this.targetWindow) {
       // Attempt to connect to an existing window
       this.targetWindow = window.open(
         undefined,
         "WIC-HBOWindow",
         "width=800,height=600");
-      console.log(this.targetWindow);
-
-      // if (this.targetWindow.origin !== hboUri) {
-      
-      // } else {
-      //   console.log("Target window is already at HBO, attempting to reconnect.");
-      this.connectionState = "RECONNECTING";
-      // }
-      // Ping for a response, see if a target window exists
+      this.connectionState = isAuto ? "AUTOCONNECTING" : "RECONNECTING";
       window.addEventListener("message", this._receiveMessage.bind(this));
     }
-
+    // Ping for a response, see if a target window exists
     this._startHandshake();
   }
 
@@ -268,12 +286,13 @@ class App extends Component {
       this.connectionState = "POLLING";
       this._pollingCount = 0;
     }
-    else if (this.connectionState === "RECONNECTING") {
+    else if (this.connectionState === "RECONNECTING" || this.connectionState === "AUTOCONNECTING") {
       if (this._pollingCount < 1) {
         console.log("Waiting for existing target window to reconnect...");
         this._pollingCount++;
       } else {
         console.log(" - Existing window does not exist or did not respond.");
+        // If we manually attempted to reconnect, launch a window.
         this._launchHBOWindow();
       }
     }
