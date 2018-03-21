@@ -2,12 +2,11 @@ import React, { Component } from "react";
 import SceneMap from "./SceneMap";
 import EpisodeMap from "./EpisodeMap";
 import WICEpisodeList from "./WICEpisodeList";
-import WICFilterAutoComplete from "./WICFilterAutoComplete";
 import WICFilterContainer from "./WICFilterContainer";
 import WICPlayer from "./WICPlayer";
 import "./App.css";
 
-const useIFrame = false;
+const useIFrame = true;
 const hboUri = "http://localhost.hadron.aws.hbogo.com:3000";
 // const wicUri = "http://localhost.hadron.aws.hbogo.com:4000"
 
@@ -28,13 +27,13 @@ class App extends Component {
     
     this.state = {
       isPlaying: false,
-      seekTime: 0,
       scenes: [],
       episodes: [],
       currentPosition: 0,
       currentScene: undefined,
       nextScene: undefined,
       connection: this.connectionState,
+      targetUri: undefined,
     };
 
     SceneMap.onReady((__scenes) => {
@@ -42,9 +41,12 @@ class App extends Component {
       this.setState({ 
         scenes: scenes,
         episodes: EpisodeMap.filterEpisodes(scenes),
+        currentScene: scenes[0],
+      }, () => {
+        console.log(scenes);
+        this._generateTargetUri();
+        this._connectHBOWindow(true);
       });
-      console.log(scenes);
-      this._connectHBOWindow(true);
     });
   }
 
@@ -52,8 +54,11 @@ class App extends Component {
   }
 
   _generateTargetUri() {
-    var epid = this.state.currentScene ? this._getCurrentEpisode().hboid : "urn:hbo:episode:GVU4NYgvPQlFvjSoJAbmL";
-    return hboUri + "/episode/" + epid + "?autoplay=true";
+    // var epid = this.state.currentScene ? this._getCurrentEpisode().hboid : "urn:hbo:episode:GVU4NYgvPQlFvjSoJAbmL";
+    var epid = this.state.episodes[0].hboid;
+    this.setState({
+      targetUri: hboUri + "/episode/" + epid + "?autoplay=true",
+    });
   }
 
   _getCurrentEpisode() {
@@ -122,13 +127,12 @@ class App extends Component {
     this.setState({
       currentScene: scene,
       nextScene: this._getNextScene(undefined, scene),
-      seekTime: scene.starttime,
     });
   }
 
   _postMessage(action, param) {
     if (action === "seek" && param === undefined) {
-      param = parseInt(this.state.seekTime, 10);
+      param = parseInt(this.state.currentPosition, 10);
     } else if (action === "toggle") {
       action = this.state.isPlaying ? "pause" : "play";
       this.setState({ isPlaying: !this.state.isPlaying });
@@ -180,6 +184,10 @@ class App extends Component {
         console.log("Position update " + newPosition + " but a new scene is pending at " + this._pendingScene.starttime);
       }
     }
+    // If we are paused, don't worry about it
+    else if (!this.state.isPlaying) {
+      console.log("Updated position " + newPosition + ", player is paused so no scene change handling.");
+    }
     // If we don't have a current scene, find one
     else if (this.state.currentScene === undefined) {
       console.log("No current scene, can't update position. TODO: Find one!");
@@ -226,6 +234,18 @@ class App extends Component {
 
   _handleNav(action) {
     switch (action) {
+    case "prevFrameMd":
+      this._postMessage("seek", this.state.currentPosition - 1.5);
+      break;
+    case "nextFrameMd":
+      this._postMessage("seek", this.state.currentPosition + 1.5);
+      break;
+    case "prevFrameSm":
+      this._postMessage("seek", this.state.currentPosition - 1);
+      break;
+    case "nextFrameSm":
+      this._postMessage("seek", this.state.currentPosition + 1);
+      break;
     case "nextScene":
       this.goToScene(this._getNextScene());
       break;
@@ -237,15 +257,14 @@ class App extends Component {
     }
   }
 
-  // _handleSeekTime(evt) {
-  //   this.setState({ seekTime: evt.target.value });
-  // }
-
   _connectHBOWindow(isAuto) {
     if (!this.targetWindow) {
       if (useIFrame) {
         console.log("iFrame mode, not connecting to a window");
-        this.targetWindow = document.getElementById("WICPlayerFrame").contentWindow;
+        var iFrame = document.getElementById("WICPlayerFrame");
+        // iFrame hasn't loaded yet, let it use componentDidMount to connect
+        if (!iFrame) { return; }
+        this.targetWindow = iFrame.contentWindow;
         this.connectionState = "OPENING";
       }
       // Attempt to connect to an existing window
@@ -263,10 +282,8 @@ class App extends Component {
   }
 
   _launchHBOWindow() {
-    console.log("Target window is not at HBO, reloading");
-    if (useIFrame) {
-      this.targetWindow.src = this._generateTargetUri();
-    } else {
+    if (!useIFrame) {
+      console.log("Target window is not at HBO, reloading");
       this.targetWindow = window.open(
         this._generateTargetUri(),
         "WIC-HBOWindow",
@@ -320,49 +337,43 @@ class App extends Component {
         <header className="App-header">
           <img src="images/got-logo-white.png" alt="logo" style={{ opacity: 0.05 }}/>
         </header>
-        { /*
-        <div className="player" style={{width:"800px", height:"400px", backgroundColor:"black"}}>
-          <object id="ifp" data="ifphls.swf" type="application/x-shockwave-flash" width="100%" height="100%">
-            <param name="FlashVars" value="videoId=1920&amp;loadVideo=http%3A%2F%2Fhls3.pro11.lv3.cdn.hbogo.com%2Fvideos%2FPRO11%2Fgov2%2Fe5%2Fhbo%2Ffeature%2F634424%2F263255_820888e59fb76b1172e7a649d35dcc7d%2Fhbo_263255_820888e59fb76b1172e7a649d35dcc7d_PRO11%2Fbase_index_c9_14_access.m3u8&amp;setDRMToken=BtOuhn3VIEVd" />
-            <param name="FlashVars" value="videoId=1879&amp;loadVideo=http%3A%2F%2Fpdl.misc.lv3.hbogo.com%2Fpreroll%2Fv2%2Fhbo%2FPRO11%2Fhbo_12796940_PRO11%2Fbase_index_c8_14.m3u8&amp;setFallbackUri=http%3A%2F%2Fhls3.pro11.lv3.cdn.hbogo.com%2Fvideos%2FPRO11%2Fgov2%2Fe5%2Fhbo%2Ffeature%2F634424%2F263255_820888e59fb76b1172e7a649d35dcc7d%2Fhbo_263255_820888e59fb76b1172e7a649d35dcc7d_PRO11%2Fbase_index_c9_14_access.m3u8%2C&amp;setDRMToken=Yxy6f0CnpyaD" />
-            <param name="FlashVars" value="videoId=7388&amp;loadVideo=http%3A%2F%2Fhls3.pro11.lv3.cdn.hbogo.com%2Fvideos%2FPRO11%2Fgov2%2Fe5%2Fhbo%2Ffeature%2F634424%2F263255_820888e59fb76b1172e7a649d35dcc7d%2Fhbo_263255_820888e59fb76b1172e7a649d35dcc7d_PRO11%2Fbase_index_c9_14_access.m3u8&amp;setDRMToken=BjF0gxr2fT4J" />
-            <param name="quality" value="high" />
-            <param name="bgcolor" value="#000000" />
-            <param name="wmode" value="transparent" />
-            <param name="allowscriptaccess" value="always" />
-            <param name="allowfullscreen" value="true" />
-            <param name="play" value="true" />
-          </object>
-        </div>
-        */ }
-        <div id="PlayerControlSection" style={{ position: "absolute", top: 0, left: 0, textAlign: "left"}}>
-          <button onClick={(__e) => this._playEpisode(this.state.episodes[1])}>Get Uri</button>
-          <br/><br/>
-          <button onClick={(__e) => this._handleNav("firstScene")}>&lt;&lt; Start from Beginning</button>
-          <button onClick={(__e) => this._handlePlay()}>{this.state.isPlaying ? "Pause" : "Play"}</button>
-          <button onClick={(__e) => this._handleNav("nextScene")} enabled={(!!this.state.nextScene).toString()}>Next Scene &gt;</button>
-          <br/><br/>
-          {/*
-            <input type="number" value={this.state.seekTime} onChange={this._handleSeekTime.bind(this)} />
-            <button onClick={(__e) => this._postMessage("seek")}>Seek</button>
-          */}
-        </div>
         <div id="ContentSection">
-          <div style={{flexGrow: 1, flexBasis: "100%"}}></div>
-          { useIFrame && (
-            <WICPlayer src={this.state.currentScene ? this._generateTargetUri() : hboUri}/>
-          )}
+          <div id="PlayerSection">
+            { useIFrame && this.state.targetUri && (
+              <WICPlayer src={this.state.targetUri}
+                onMount={this._connectHBOWindow.bind(this)} />
+            )}
+            <div id="PlayerControlSection" style={{textAlign: "left"}}>
+              <br/>
+              <button onClick={(__e) => this._handleNav("firstScene")}>&lt;&lt; Start from Beginning</button>
+              <button onClick={(__e) => this._handlePlay()}>{this.state.isPlaying ? "Pause" : "Play"}</button>
+              <button onClick={(__e) => this._handleNav("nextScene")} enabled={(!!this.state.nextScene).toString()}>Next Scene &gt;</button>
+              <br/><br/>
+              <button onClick={(__e) => this._handleNav("prevFrameMd")}>&lt;&lt;| 1s </button>
+              &nbsp;
+              <button onClick={(__e) => this._handleNav("prevFrameSm")}>&lt;| 100ms </button>
+              &nbsp;&nbsp;
+              <button onClick={(__e) => this._handleNav("nextFrameSm")}>100ms |&gt;</button>
+              &nbsp;
+              <button onClick={(__e) => this._handleNav("nextFrameMd")}>1s |&gt;&gt;</button>
+              <br /><br/>
+              { this.state.currentScene && !this.state.isPlaying && (
+                <div style={{fontSize: "160%", color: "#EEEEEE"}}>
+                  {parseInt((this._getCurrentEpisode().duration - this.state.currentPosition)*1000, 10)/100}
+                </div>
+              )}
+            </div>
+          </div>
           <WICEpisodeList 
             episodes={this.state.episodes} 
             currentScene={this.state.currentScene} 
             onScenePlay={this.goToScene.bind(this)}
           />
         </div>
-        <WICFilterAutoComplete />
         <WICFilterContainer filters={this._filters} onFilterChange={this._handleFilterChange.bind(this)}/>
         <div id="StatusSection">
           <div>{this.state.connection}</div>
-          <div>{parseInt(this.state.currentPosition, 10)}</div>
+          <div>{parseInt(this.state.currentPosition*1000, 10)/100}</div>
         </div>
       </div>
     );

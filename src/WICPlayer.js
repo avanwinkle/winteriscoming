@@ -2,6 +2,11 @@ import React, { Component } from "react";
 import "./styles/WICPlayer.css";
 
 class WICPlayer extends Component {
+  componentDidMount() {
+    console.log("mounted!", this.props);
+    this.props.onMount();
+  }
+
   render() {
     return (
       <div className="WICPlayerContainer">
