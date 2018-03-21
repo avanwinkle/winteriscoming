@@ -8,7 +8,7 @@ import CheckBox from "material-ui/svg-icons/toggle/check-box";
 import CheckBoxOutlineBlank from "material-ui/svg-icons/toggle/check-box-outline-blank";
 import FlatButton from "material-ui/FlatButton";
 import IndeterminateCheckBox from "material-ui/svg-icons/toggle/indeterminate-check-box";
-import { blueGrey100, blueGrey200, blueGrey600, blueGrey900 } from "material-ui/styles/colors";
+import { blueGrey200, blueGrey600, blueGrey900 } from "material-ui/styles/colors";
 
 class WICFilterContainer extends Component {
   constructor(props) {

@@ -5,7 +5,6 @@ import WICEpisodeList from "./WICEpisodeList";
 import WICFilterAutoComplete from "./WICFilterAutoComplete";
 import WICFilterContainer from "./WICFilterContainer";
 import WICPlayer from "./WICPlayer";
-import WICSceneList from "./WICSceneList";
 import "./App.css";
 
 const useIFrame = false;
@@ -227,12 +226,14 @@ class App extends Component {
 
   _handleNav(action) {
     switch (action) {
-      case "nextScene":
-        this.goToScene(this._getNextScene());
-        break;
-      case "firstScene":
-        this.goToScene(this.state.scenes[0]);
-        break;
+    case "nextScene":
+      this.goToScene(this._getNextScene());
+      break;
+    case "firstScene":
+      this.goToScene(this.state.scenes[0]);
+      break;
+    default:
+      console.warn("Unknown nav action '" + action +"'");
     }
   }
 
@@ -346,19 +347,22 @@ class App extends Component {
             <button onClick={(__e) => this._postMessage("seek")}>Seek</button>
           */}
         </div>
-        { useIFrame && (
-          <WICPlayer src={this.state.currentScene ? this._generateTargetUri() : hboUri}/>
-        )}
-        <WICEpisodeList 
-          episodes={this.state.episodes} 
-          currentScene={this.state.currentScene} 
-          onScenePlay={this.goToScene.bind(this)}
-        />
+        <div id="ContentSection">
+          <div style={{flexGrow: 1, flexBasis: "100%"}}></div>
+          { useIFrame && (
+            <WICPlayer src={this.state.currentScene ? this._generateTargetUri() : hboUri}/>
+          )}
+          <WICEpisodeList 
+            episodes={this.state.episodes} 
+            currentScene={this.state.currentScene} 
+            onScenePlay={this.goToScene.bind(this)}
+          />
+        </div>
         <WICFilterAutoComplete />
         <WICFilterContainer filters={this._filters} onFilterChange={this._handleFilterChange.bind(this)}/>
         <div id="StatusSection">
           <div>{this.state.connection}</div>
-          <div>{parseInt(this.state.currentPosition)}</div>
+          <div>{parseInt(this.state.currentPosition, 10)}</div>
         </div>
       </div>
     );

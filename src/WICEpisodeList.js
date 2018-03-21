@@ -24,8 +24,8 @@ class EpisodeList extends Component {
       }
 
       return (
-        <div key={episode.id} className={"episodeContainer episodeState" + episodeState }>
-          <div className="episodeHeader">
+        <div key={episode.id} className={"stickyContainer episodeContainer episodeState" + episodeState }>
+          <div className="episodeHeader sticky">
             <div className="episodeTile" style={{ backgroundImage: "url('" + episode.images.background + "')" }} />
             <div className="episodeMetadata">
               <div className="episodeNumber">Sn. {episode.season} Ep. {episode.episode}</div>

@@ -1,11 +1,17 @@
+.EpisodeListContainer {
+  flex: 0 0 300px;
+  overflow: auto;
+}
+
 .episodeContainer {
   text-align: left;
-  max-width: 300px;
 }
 
 .episodeHeader {
   display: flex;
   background-color: #333344;
+  position: sticky;
+  top: 0;
 }
 
 .episodeTile {
