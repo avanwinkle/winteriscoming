@@ -97,6 +97,7 @@ class Scene extends SpreadsheetEntry {
     this.duration = this.endtime - this.starttime;
     this.durationString = Utils.durationToString(this.duration);
     this.filters = this.characters.concat(this.houses, this.locations, this.storylines);
+    this.episodeId = episode.hboid;
 
     // Validate all the filters
     this.filters.forEach((filt) => {

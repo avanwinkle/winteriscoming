@@ -14,7 +14,7 @@ class WICFilterContainer extends Component {
   constructor(props) {
     super(props);
     this.state = {
-      showFilterDrawer: true,
+      showFilterDrawer: false,
     };
   }
 

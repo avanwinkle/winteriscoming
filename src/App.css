@@ -43,6 +43,17 @@ body {
   color: #666;
 }
 
+#TargetDebug {
+  position: fixed;
+  bottom: 48px;
+  left: 8;
+  display: flex;
+}
+
+.targetDebugContainer {
+  text-align: left;
+  padding: 0 8px;
+}
 
 @keyframes App-logo-spin {
   from { transform: rotate(0deg); }

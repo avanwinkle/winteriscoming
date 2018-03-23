@@ -10,12 +10,14 @@ class WICPlayer extends Component {
   render() {
     return (
       <div className="WICPlayerContainer">
-        <iframe title="Player"
-          id="WICPlayerFrame"
-          className="WICPlayerFrame"
-          allowFullScreen="true"
-          scrolling="no"
-          src={this.props.src}></iframe>
+        {["blue", "red"].forEach((key) => (
+          <iframe title="Player" key={key}
+            id={key + "WICPlayerFrame"}
+            className="WICPlayerFrame"
+            allowFullScreen="true"
+            scrolling="no"
+            src={this.props.src}></iframe>
+        ))}
       </div>
     );
   }
