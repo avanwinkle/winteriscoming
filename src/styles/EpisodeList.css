@@ -1,6 +1,7 @@
 .EpisodeListContainer {
   flex: 0 0 300px;
   overflow: auto;
+  padding-bottom: 32px;
 }
 
 .episodeContainer {

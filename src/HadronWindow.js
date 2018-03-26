@@ -18,6 +18,7 @@ class HadronWindow {
 
   connect(sceneToLoad) {
     return this._connect().then(() => {
+      console.log("Window connected, executing callback to load scene:", sceneToLoad);
       this.loadScene(sceneToLoad);
     });
   }
@@ -48,7 +49,7 @@ class HadronWindow {
         else {
           console.log("Target window '" + this.univ + "' is not at desired url, reloading");
           this.targetWindow = window.open(
-            DEFAULT_URI,
+            DEFAULT_URI + "&univ=" + this.univ,
             this._targetWindowName,
             "width=800,height=600");
           this.connectionState = "OPENING";
@@ -68,13 +69,15 @@ class HadronWindow {
 
   loadScene(scene) {
     if (scene === undefined) { 
-      console.warn("Unable to go to scene undefined");
+      this.debugLog("Unable to go to scene undefined");
       return;
+    } else {
+      this.debugLog("Loading scene " + scene.id + " '" + scene.description + "'", scene);
     }
 
     this.loadedScene = scene;
-    this.pause();
-    this.seek(scene.starttime, scene.episodeurn);
+    // this.pause();
+    this.seek(scene.starttime, scene.episodeId);
   }
 
   onConnected(data) {
@@ -95,16 +98,18 @@ class HadronWindow {
   }
 
   post(args) {
-    // Always send the univ
-    var body = Object.assign({univ: this.univ, message: "wic-controlaction"}, args);
+    var body = Object.assign({
+      univ: this.univ, // Always send the univ
+      message: "wic-controlaction" // Default value, can be overwritten by args
+    }, args);
     this._onReady(() => { 
       // this.debugLog("Posting message:", body);
       this._targetWindow.postMessage(body, hboUri); 
     });
   }
 
-  seek(time, episodeUrn) {
-    this.post({action: "seek", seekTime: time, episodeId: episodeUrn});
+  seek(time, episodeId) {
+    this.post({action: "seek", seekTime: time, episodeId: episodeId});
   }
 
   toggle() {
@@ -133,20 +138,20 @@ class HadronWindow {
     }
     // If the position at the end of our current scene
     else if (newPosition > this.loadedScene.endtime) {
-      // If the next scene immediately follows this one, just keep playing
+      // If a scene is queued, play it immediately
       if (this.queuedScene) {
+        stayInSameWindow = true;
+        // If the next scene immediately follows this one, just keep playing
         if (newPosition >= this.queuedScene.starttime) {
           this.debugLog("loadedScene complete, flowing directly to queuedScene without action");
-          stayInSameWindow = true;
         } else {
-          this.debugLog("loadedScene complete, pausing and advancing to queuedScene");
-          this.pause();
+          this.debugLog("loadedScene complete, advancing to queuedScene");
           this.seek(this.queuedScene.starttime);
         }
         this.loadedScene = this.queuedScene;
         this.queuedScene = undefined;
       } else {
-        this.debugLog("loadedScene finished and no queuedScene to advance/queue");
+        this.debugLog("loadedScene " + this.loadedScene.id + " finished and no queuedScene to advance/queue");
         this.loadedScene = undefined;
       }
       this._onSceneComplete(stayInSameWindow);
@@ -163,7 +168,7 @@ class HadronWindow {
   }
 
   _onSceneComplete(stayInSameWindow) {
-    console.log("Executing callbacks fro scene complete");
+    console.log("Executing callbacks for scene complete");
     this._onSceneCompleteFns.forEach((fn) => { fn(stayInSameWindow); });
   }
 

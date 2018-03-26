@@ -21,9 +21,14 @@ class SceneMapBase {
   }
 
   _buildSceneList(sceneEntries) {
-    sceneEntries.forEach((sceneEntry) => {
-      this.scenes.push(new Scene(sceneEntry));
+    sceneEntries.reverse();
+    // Build the scenes in reverse order so we can use n+1 starttime as n endtime
+    sceneEntries.forEach((sceneEntry, idx) => {
+      var followingScene = (idx !== 0 ? this.scenes[idx-1] : undefined);
+      this.scenes.push(new Scene(sceneEntry, followingScene));
     });
+    // Restore the scenes to chronological order
+    this.scenes.reverse();
     this._onReady.forEach((callbackFn) => {
       callbackFn.apply(null, [this.scenes]);
     });
@@ -85,19 +90,22 @@ class SceneMapBase {
 }
 
 class Scene extends SpreadsheetEntry {
-  constructor(sceneEntry) {
+  constructor(sceneEntry, nextSceneEntry) {
     super(sceneEntry);
     this.seasonepisode = this.season * 100 + this.episode;
     this.id = this.seasonepisode * 100 + this.scene;
     
     // Scene times are tracked relative to the end, so calculate start/end points
-    var episode = EpisodeMap.getEpisode(this.seasonepisode);
-    this.starttime = episode.duration - this.inpointfromend;
-    this.endtime = episode.duration - this.outpointfromend;
+    this.episode = EpisodeMap.getEpisode(this.seasonepisode);
+    this.starttime = this.episode.duration - this.inpointfromend;
+    
+    // We don't always specify and endtime; in which case, use the next scene's start time
+    var outpoint = this.outpointfromend || (nextSceneEntry ? nextSceneEntry.inpointfromend : 0);
+    this.endtime = this.episode.duration - outpoint;
     this.duration = this.endtime - this.starttime;
     this.durationString = Utils.durationToString(this.duration);
     this.filters = this.characters.concat(this.houses, this.locations, this.storylines);
-    this.episodeId = episode.hboid;
+    this.episodeId = this.episode.hboid;
 
     // Validate all the filters
     this.filters.forEach((filt) => {
