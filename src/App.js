@@ -108,8 +108,13 @@ class App extends HadronConnector {
     }, () => { this._onSceneChange(true); } );
   }
 
-  _updatePosition(newPosition) {
+  _updatePosition(newPosition, newState) {
     this.setState({ currentPosition: newPosition });
+    if (this._pendingSeek && this._pendingSeek[0] === newPosition && newState === 3) {
+      console.log("New position is set at " + newPosition + ", now moving to pendingSeek " + this._pendingSeek[1]);
+      this.seek(this._pendingSeek[1]);
+      this._pendingSeek = undefined;
+    }
   }
 
   _handleFilterChange() {
@@ -136,13 +141,12 @@ class App extends HadronConnector {
       this.seek(this.state.currentPosition + 1);
       break;
     case "prevFrameSm":
+      this._pendingSeek = [this.state.currentPosition - 1.4, this.state.currentPosition - 0.4];
       this.seek(this.state.currentPosition - 1.4);
-      this.seek(this.state.currentPosition + 1);
       break;
     case "nextFrameSm":
-      console.log("Calling nextframe, currentPosition is:", this.state.currentPosition);
+      this._pendingSeek = [this.state.currentPosition + 1.4, this.state.currentPosition + 0.4];
       this.seek(this.state.currentPosition + 1.4);
-      this.seek(this.state.currentPosition - 1);
       break;
     case "nextScene":
       this.goToScene(this._getNextScene());
@@ -153,6 +157,7 @@ class App extends HadronConnector {
     default:
       console.warn("Unknown nav action '" + action +"'");
     }
+    console.log("Current position is " + this.state.currentPosition + ", pending seek is " + this._pendingSeek);
   }
 
   render() {
@@ -209,12 +214,12 @@ class App extends HadronConnector {
                 <div>
                   Current: {target.loadedScene ? target.loadedScene.description : "None"}
                   <br />
-                  In/Out: {target.loadedScene ? parseInt(target.loadedScene.starttime, 10) + ":" + parseInt(target.loadedScene.endtime) : " N/A"}
+                  In/Out: {target.loadedScene ? parseInt(target.loadedScene.starttime, 10) + ":" + parseInt(target.loadedScene.endtime, 10) : " N/A"}
                 </div>
                 <div>
                   Queued: {target.queuedScene ? target.queuedScene.description : "None"}
                   <br />
-                  In/Out: {target.queuedScene ? parseInt(target.queuedScene.starttime, 10) + ":" + parseInt(target.queuedScene.endtime) : " N/A"}
+                  In/Out: {target.queuedScene ? parseInt(target.queuedScene.starttime, 10) + ":" + parseInt(target.queuedScene.endtime, 10) : " N/A"}
                 </div>
               </div>
             );

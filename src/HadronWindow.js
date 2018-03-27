@@ -1,5 +1,6 @@
 const hboUri = "http://localhost.hadron.aws.hbogo.com:3000";
 const DEFAULT_URI = hboUri + "/episode/urn:hbo:episode:GVU4NYgvPQlFvjSoJAbmL?autoplay=true";
+const TIMECODE_PRECISION = 0.4;
 
 class HadronWindow {
   constructor(univ, useIframe) {
@@ -136,8 +137,8 @@ class HadronWindow {
     else if (this.loadedScene && this.playbackState === 3) {
       this.debugLog("Updated position " + newPosition + ", not playing so no scene change handling.");
     }
-    // If the position at the end of our current scene
-    else if (newPosition > this.loadedScene.endtime) {
+    // If the position at the end of our current scene (or within the margin of error)
+    else if (newPosition > this.loadedScene.endtime - TIMECODE_PRECISION) {
       // If a scene is queued, play it immediately
       if (this.queuedScene) {
         stayInSameWindow = true;

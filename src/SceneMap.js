@@ -21,14 +21,13 @@ class SceneMapBase {
   }
 
   _buildSceneList(sceneEntries) {
-    sceneEntries.reverse();
-    // Build the scenes in reverse order so we can use n+1 starttime as n endtime
-    sceneEntries.forEach((sceneEntry, idx) => {
-      var followingScene = (idx !== 0 ? this.scenes[idx-1] : undefined);
-      this.scenes.push(new Scene(sceneEntry, followingScene));
+    var scenes = sceneEntries.map((sceneEntry) => new Scene(sceneEntry));  
+    scenes.forEach((scene, idx) => {
+      var previousScene = (idx > 0 ? scenes[idx-1] : undefined);
+      var followingScene = (idx < scenes.length-1 ? scenes[idx+1] : undefined);
+      scene.init(previousScene, followingScene);
+      this.scenes.push(scene);
     });
-    // Restore the scenes to chronological order
-    this.scenes.reverse();
     this._onReady.forEach((callbackFn) => {
       callbackFn.apply(null, [this.scenes]);
     });
@@ -90,23 +89,26 @@ class SceneMapBase {
 }
 
 class Scene extends SpreadsheetEntry {
-  constructor(sceneEntry, nextSceneEntry) {
-    super(sceneEntry);
-    this.seasonepisode = this.season * 100 + this.episode;
-    this.id = this.seasonepisode * 100 + this.scene;
+  // Init after constructor() to allow reference to decoded spreadsheet field names
+  init(prevSceneEntry, nextSceneEntry) {
+    // We don't always specific season and episode; in which case use the prev scene's
+    if (!this.seasonnum) { this.seasonnum = prevSceneEntry.seasonnum; }
+    if (!this.episodenum) { this.episodenum = prevSceneEntry.episodenum; }
+    // We don't always specify and endtime; in which case, use the next scene's start time
+    if (!this.outpointfromend) { this.outpointfromend = nextSceneEntry ? nextSceneEntry.inpointfromend : 0; }
+
+    this.seasonepisode = this.seasonnum * 100 + this.episodenum;
+    this.id = this.seasonepisode * 100 + this.scenenum;
     
     // Scene times are tracked relative to the end, so calculate start/end points
     this.episode = EpisodeMap.getEpisode(this.seasonepisode);
     this.starttime = this.episode.duration - this.inpointfromend;
-    
-    // We don't always specify and endtime; in which case, use the next scene's start time
-    var outpoint = this.outpointfromend || (nextSceneEntry ? nextSceneEntry.inpointfromend : 0);
-    this.endtime = this.episode.duration - outpoint;
+    this.endtime = this.episode.duration - this.outpointfromend;
     this.duration = this.endtime - this.starttime;
     this.durationString = Utils.durationToString(this.duration);
     this.filters = this.characters.concat(this.houses, this.locations, this.storylines);
     this.episodeId = this.episode.hboid;
-
+    console.log("Scene " + this.id + ", " + this.description + ": starts at " + this.starttime + " and ends at " + this.endtime);
     // Validate all the filters
     this.filters.forEach((filt) => {
       if (!Filters.get(filt)) {

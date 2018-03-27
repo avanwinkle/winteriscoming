@@ -17,8 +17,9 @@
 
 .episodeTile {
   background-size: cover;
-  width: 100px;
-  height: 80px;
+  background-position: center center;
+  width: 124px;
+  height: 70px;
   flex: 0 0 100px;
 }
 

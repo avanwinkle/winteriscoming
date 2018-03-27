@@ -19,6 +19,7 @@ Filters.getAllNames = function() {
 Filters.characters = [
   { id: "Arya",     house: "Stark" },
   { id: "Bran",     house: "Stark" },
+  { id: "Bronn", },
   { id: "Caetlyn",  house: "Stark" },
   { id: "Cersei",   house: "Lannister" },
   { id: "Danerys",  house: "Targaryen" },

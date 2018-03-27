@@ -184,7 +184,7 @@ class EpisodeMapBase {
 class Episode extends SpreadsheetEntry {
   constructor(episodeEntry) {
     super(episodeEntry);
-    this.id = (this.season * 100) + this.episode;
+    this.id = (this.seasonnum * 100) + this.episodenum;
     this.scenes = [];
     this.edits = [];
     this.images = {};

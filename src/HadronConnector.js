@@ -121,15 +121,15 @@ class HadronConnector extends Component {
     else if (event.data.message === "playback_state_changed") {
       console.log("Window '" + event.data.univ + "' reports playback state " + event.data.playbackState + " and position ", event.data.position);
       target.playbackState = event.data.playbackState;
-      target.updatePosition(event.data.position);
-      this._updatePosition(event.data.position);
+      target.updatePosition(event.data.position, event.data.playbackState);
+      this._updatePosition(event.data.position, event.data.playbackState);
     }
     else if (event.data.message === "position") {
       // If paused and no change, don't bother
       if (target.currentPosition === event.data.value && target.playbackState === 3) { return; }
       console.log("Window '" + event.data.univ + "' reports position:", event.data.value);
-      target.updatePosition(event.data.value);
-      this._updatePosition(event.data.value);
+      target.updatePosition(event.data.value, target.playbackState);
+      this._updatePosition(event.data.value, target.playbackState);
     }
   }
 
