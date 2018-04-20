@@ -4,20 +4,28 @@ import "./styles/WICPlayer.css";
 class WICPlayer extends Component {
   componentDidMount() {
     console.log("mounted!", this.props);
-    this.props.onMount();
+    if (this.props.onMount) {
+      this.props.onMount();
+    }
   }
 
   render() {
     return (
       <div className="WICPlayerContainer">
-        {["blue", "red"].forEach((key) => (
-          <iframe title="Player" key={key}
-            id={key + "WICPlayerFrame"}
-            className="WICPlayerFrame"
-            allowFullScreen="true"
-            scrolling="no"
-            src={this.props.src}></iframe>
-        ))}
+        <iframe title="Player" key="blue"
+          id="blueWICPlayerFrame"
+          style={{ borderColor: "blue", height: this.props.activeUniv === "blue" ? undefined : 0 }}
+          className="WICPlayerFrame"
+          allowFullScreen="true"
+          scrolling="no"
+          src={this.props.src}></iframe>
+        <iframe title="Player" key="red"
+          id="redWICPlayerFrame"
+          style={{ borderColor: "red", height: this.props.activeUniv === "red" ? undefined : 0 }}
+          className="WICPlayerFrame"
+          allowFullScreen="true"
+          scrolling="no"
+          src={this.props.src}></iframe>
       </div>
     );
   }

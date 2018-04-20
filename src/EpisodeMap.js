@@ -12,6 +12,7 @@ const hurleyToken = new Promise((resolve, reject) => {
     body: JSON.stringify({
       "client_id":"88a4f3c6-f1de-42d7-8ef9-d3b00139ea6a",
       "client_secret":"88a4f3c6-f1de-42d7-8ef9-d3b00139ea6a",
+      "deviceSerialNumber": "4d001b5e-0e65-4a48-ba91-012ff10d4b4d",
       "scope":"browse video_playback_free",
       "grant_type":"client_credentials",
     }),

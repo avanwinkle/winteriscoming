@@ -1,7 +1,7 @@
 import { Component } from "react";
 import HadronWindow from "./HadronWindow";
 
-const USE_IFRAME = false;
+const USE_IFRAME = true;
 const TARGET_WINDOWS = ["blue", "red"];
 
 class HadronConnector extends Component {

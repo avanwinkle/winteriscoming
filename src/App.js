@@ -168,10 +168,14 @@ class App extends HadronConnector {
         </header>
         <div id="ContentSection">
           <div id="PlayerSection">
-            { this._useIframe && this.state.targetUri && (
-              <WICPlayer key="blue"
-                src={this.state.targetUri}
-                onMount={this._connectHBOWindow.bind(this)} />
+            { this._useIframe && (
+              <WICPlayer
+                activeUniv={this.state.activeTarget.univ}
+                src={this.state.targets.blue.targetUri}
+                onMount={() => {
+                  this.state.targets.blue.connect()
+                }} 
+                />
             )}
             <div id="PlayerControlSection" style={{textAlign: "left"}}>
               <br/>

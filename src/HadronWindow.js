@@ -8,6 +8,7 @@ class HadronWindow {
     this.connectionState = "NOT_CONNECTED";
     this.loadedScene = undefined;
     this.playbackState = -1;
+    this.targetUri = DEFAULT_URI + "&univ=" + univ;
     this.currentPosition = -1;
     this._useIframe = useIframe;
     this._targetWindow = undefined;
@@ -26,7 +27,7 @@ class HadronWindow {
 
   _connect(isRetry) {
     if (!isRetry && this._connectProm) { return this._connectProm; }
-
+    
     this._connectProm = new Promise((resolve, reject) => {
       if (!this._targetWindow || isRetry) {
         this._pollingCount = 0;
@@ -50,7 +51,7 @@ class HadronWindow {
         else {
           console.log("Target window '" + this.univ + "' is not at desired url, reloading");
           this.targetWindow = window.open(
-            DEFAULT_URI + "&univ=" + this.univ,
+            this.targetUri,
             this._targetWindowName,
             "width=800,height=600");
           this.connectionState = "OPENING";
